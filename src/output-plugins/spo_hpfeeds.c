@@ -152,7 +152,7 @@ PNode GetFront(Queue *pqueue, JsonRecode *json_record);
 /*Get the rear node from the queue*/
 PNode GetRear(Queue *pqueue, JsonRecode *json_record);
 /*push a node into the queue*/
-void EnQueue(Queue *pqueue, JsonRecode *json_record);
+void EnQueue(Queue *pqueue, JsonRecode json_record);
 /*Pop a node from the queue*/
 PNode DeQueue(Queue *pqueue);
 /*Traverse the queue and invoke the visit function on each node*/
@@ -210,7 +210,7 @@ int GetSize(Queue *pqueue)
 }  
 
 /*Push a node into the  queue*/
-void EnQueue(Queue *pqueue, JsonRecode *json_record)
+void EnQueue(Queue *pqueue, JsonRecode json_record)
 {
   PNode pnode = (PNode)malloc(sizeof(Node));
   if (pnode != NULL){
@@ -1030,8 +1030,6 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
 #endif
 
     //HPFeedsPublish(json_record, config);
-    PNode *pnode;
-    pnode->json_record = json_record;
     EnQueue(queue, json_record);
 
     //json_decref(json_record);
