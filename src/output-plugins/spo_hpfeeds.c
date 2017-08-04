@@ -1034,10 +1034,10 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
 
 #endif
 
-    HPFeedsPublish(json_record, config);
-    //EnQueue(queue, json_record);
+    //HPFeedsPublish(json_record, config);
+    EnQueue(queue, json_record);
 
-    json_decref(json_record);
+    //json_decref(json_record);
 }
 
 
