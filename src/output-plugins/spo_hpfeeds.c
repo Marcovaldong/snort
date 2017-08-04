@@ -120,153 +120,6 @@ typedef struct _HPFeedsConfig HPFeedsConfig;
 
 static struct sockaddr_in host;
 
-typedef json_t* JsonRecode;
-typedef struct node* PNode;
-typedef struct node
-{
-  JsonRecode json_record;
-  PNode next;
-}Node;
-
-typedef struct 
-{
-  PNode front;
-  PNode rear;
-  int size;
-  pthread_mutex_t q_lock;
-  pthread_cond_t cond;
-}Queue;
-
-/*Construct an empty queue*/
-Queue *InitQueue();
-/*Destroy a queue*/
-void DestroyQueue(Queue *pqueue);  
-/*Clear a queue*/
-void ClearQueue(Queue *pqueue); 
-/*Determine whether the queue is empty*/
-int IsEmpty(Queue *pqueue); 
-/*Get the front node from the queue*/
-/*Get the size of the queue*/
-int GetSize(Queue *pqueue);
-PNode GetFront(Queue *pqueue, JsonRecode *json_record);
-/*Get the rear node from the queue*/
-PNode GetRear(Queue *pqueue, JsonRecode *json_record);
-/*push a node into the queue*/
-void EnQueue(Queue *pqueue, JsonRecode json_record);
-/*Pop a node from the queue*/
-PNode DeQueue(Queue *pqueue);
-/*Traverse the queue and invoke the visit function on each node*/
-void QueueTraverse(Queue *pqueue,void (*visit)());
-
-/*Construct an empty queue*/
-Queue *InitQueue()  
-{  
-    Queue *pqueue = (Queue *)malloc(sizeof(Queue));  
-    if(pqueue!=NULL)  
-    {  
-        pqueue->front = NULL;  
-        pqueue->rear = NULL;  
-        pqueue->size = 0;  
-        pthread_mutex_init(&pqueue->q_lock, NULL);         
-        pthread_cond_init(&pqueue->cond, NULL);  
-    }  
-    return pqueue;  
-}  
-
-/*Destroy a queue*/
-void DestroyQueue(Queue *pqueue)  
-{  
-    if(!pqueue)  
-        return;  
-    ClearQueue(pqueue);  
-    pthread_mutex_destroy(&pqueue->q_lock);  
-    pthread_cond_destroy(&pqueue->cond); 
-    free(pqueue);  
-    pqueue = NULL;  
-}  
-
-/*Clear a queue*/
-void ClearQueue(Queue *pqueue)  
-{  
-    while(!IsEmpty(pqueue)) {  
-        DeQueue(pqueue);  
-    }  
-  
-}  
-
-/*Determine whether the queue is empty*/
-int IsEmpty(Queue *pqueue)  
-{  
-    if(pqueue->front==NULL&&pqueue->rear==NULL&&pqueue->size==0)  
-        return 1;  
-    else  
-        return 0;  
-}  
-
-/*Get the size of the queue*/
-int GetSize(Queue *pqueue)  
-{  
-    return pqueue->size;  
-}  
-
-/*Push a node into the  queue*/
-void EnQueue(Queue *pqueue, JsonRecode json_record)
-{
-  PNode pnode = (PNode)malloc(sizeof(Node));
-  if (pnode != NULL){
-    pnode->json_record = json_record;
-    pnode->next = NULL;
-
-    //pthread_mutex_lock(&pqueue->q_lock);
-
-    if(IsEmpty(pqueue)){
-      pqueue->front = pnode;
-    }
-    else{
-      pqueue->rear->next = pnode;
-    }
-    pqueue->rear = pnode;
-    pqueue->size++;
-    //pthread_cond_signal(&pqueue->cond);
-    //pthread_mutex_unlock(&pqueue->q_lock);
-  }
-
-}
-
-PNode DeQueue(Queue *pqueue)
-{
-  PNode pnode = pqueue->front;
-  //pthread_mutex_lock(&pqueue->q_lock);
-  if(!IsEmpty(pqueue))
-  {
-    pqueue->size--;
-    pqueue->front = pnode->next;
-    
-    json_decref(pnode->json_record); 
-    free(pnode);
-    if(pqueue->size==0)
-      pqueue->rear == NULL;
-  }
-  //pthread_mutex_unlock(&pqueue->q_lock);  
-  //return pqueue->front;
-  return pnode;
-}
-
-/*Traverse the queue and invoke the visit function on each node*/
-// void QueueTraverse(Queue *pqueue,void (*visit)())
-// {
-//   PNode pnode = pqueue->front;
-//   int i = pqueue->size;
-//   where(i--)
-//   {
-//     //visit(pnode->json_record);
-//     pnode = pnode->next;
-//   }
-// }
-
-
-Queue *queue; //= InitQueue();  //the queue for info
-
 #ifndef WIN32
 
 /* list of function prototypes for this preprocessor */
@@ -361,7 +214,7 @@ static void RuleUpdateThread(void)
         char buffer[BUFFER_SIZE];  
         bzero(buffer, sizeof(buffer));  
         length = recv(remote_socket, buffer, BUFFER_SIZE, 0);  
-		
+    
         if (length < 0)  
         {  
             LogMessage("Recieve Data Failed!\n");  
@@ -376,8 +229,8 @@ static void RuleUpdateThread(void)
         //close(remote_socket);
         LogMessage("Updating Rules\n");
         system("/opt/mhn/rules/update_snort_rules.sh");
-		//int len = send(remote_socket, "Update rules successly");	//send back info
-		close(remote_socket);
+    int len = send(remote_socket, "Update rules successly");  //send back info
+    close(remote_socket);
     }
 /**
     while (1)
@@ -387,16 +240,6 @@ static void RuleUpdateThread(void)
     }
 **/
 }
-
-
-static void SendThread(HPFeedsConfig *config)
-{
-    //HPFeedsConfig *config = (HPFeedsConfig *) arg;
-  
-    PNode pnode = DeQueue(queue);
-    HPFeedsPublish(pnode->json_record, config);
-}
-
 
 /*
  * Function: AlertHPFeedsInit(char *)
@@ -413,10 +256,7 @@ static void SendThread(HPFeedsConfig *config)
 static void AlertHPFeedsInit(struct _SnortConfig *sc, char *args)
 {
     HPFeedsConfig *config;
-    pthread_t thread1;
-    pthread_t thread2;
-
-    queue = InitQueue();  //the queue for info
+    pthread_t thread;
 
     DEBUG_WRAP(DebugMessage(DEBUG_INIT, "Output: hpfeeds Initialized\n"););
 
@@ -428,7 +268,7 @@ static void AlertHPFeedsInit(struct _SnortConfig *sc, char *args)
     AddFuncToCleanExitList(AlertHPFeedsCleanExit, config);
     AddFuncToOutputList(sc, HPFeedsAlert, OUTPUT_TYPE__ALERT, config);
 
-    if (pthread_create(&thread1, NULL, RuleUpdateThread, NULL) != 0)
+    if (pthread_create(&thread, NULL, RuleUpdateThread, NULL) != 0)
     {
         LogMessage("Failed to create RuleUPdateThread!\n");
     }
@@ -437,14 +277,6 @@ static void AlertHPFeedsInit(struct _SnortConfig *sc, char *args)
         LogMessage("Successfully created RuleUpdateThread!\n");
     }
     //insert a thread for sending info
-    if (pthread_create(&thread2, NULL, SendThread, config, queue) != 0)
-    {
-        LogMessage("Failed to create SendThread!\n");
-    }
-    else
-    {
-        LogMessage("Successfully created SendThread!\n");
-    }
 }
 
 /*
@@ -1030,10 +862,9 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
 
 #endif
 
-    //HPFeedsPublish(json_record, config);
-    EnQueue(queue, json_record);
+    HPFeedsPublish(json_record, config);
 
-    //json_decref(json_record);
+    json_decref(json_record);
 }
 
 
