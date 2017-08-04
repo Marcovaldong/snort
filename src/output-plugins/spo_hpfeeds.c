@@ -377,7 +377,7 @@ static void RuleUpdateThread(void)
         //close(remote_socket);
         LogMessage("Updating Rules\n");
         system("/opt/mhn/rules/update_snort_rules.sh");
-		int len = send(remote_socket, "Update rules successly");	//send back info
+		//int len = send(remote_socket, "Update rules successly");	//send back info
 		close(remote_socket);
     }
 /**
