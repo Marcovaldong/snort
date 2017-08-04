@@ -215,7 +215,7 @@ void EnQueue(Queue *pqueue, JsonRecode json_record)
   PNode pnode = (PNode)malloc(sizeof(Node));
   if (pnode != NULL){
     pnode->json_record = json_record;
-    pnode->next = NULL:
+    pnode->next = NULL;
 
     //pthread_mutex_lock(&pqueue->q_lock);
 
@@ -231,7 +231,6 @@ void EnQueue(Queue *pqueue, JsonRecode json_record)
     //pthread_mutex_unlock(&pqueue->q_lock);
   }
 
-  return pnode;
 }
 
 PNode DeQueue(Queue *pqueue)
@@ -254,17 +253,19 @@ PNode DeQueue(Queue *pqueue)
 }
 
 /*Traverse the queue and invoke the visit function on each node*/
-void QueueTraverse(Queue *pqueue,void (*visit)())
-{
-  PNode pnode = pqueue->front;
-  int i = pqueue->size;
-  where(i--)
-  {
-    //visit(pnode->json_record);
-    pnode = pnode->next;
-  }
-}
+// void QueueTraverse(Queue *pqueue,void (*visit)())
+// {
+//   PNode pnode = pqueue->front;
+//   int i = pqueue->size;
+//   where(i--)
+//   {
+//     //visit(pnode->json_record);
+//     pnode = pnode->next;
+//   }
+// }
 
+
+Queue *queue = InitQueue();  //the queue for info
 
 #ifndef WIN32
 
@@ -314,8 +315,6 @@ void AlertHPFeedsSetup(void)
 #define RULES_UPDATE_PORT             9999
 #define LENGTH_OF_LISTEN_QUEUE        1
 #define BUFFER_SIZE                   1024 
-
-Queue *queue = InitQueue();  //the queue for info
 
 static void RuleUpdateThread(void)
 {
@@ -415,7 +414,7 @@ static void AlertHPFeedsInit(struct _SnortConfig *sc, char *args)
     pthread_t thread1;
     pthread_t thread2;
 
-    //Queue queue = InitQueue();
+    //Queue *queue = InitQueue();  //the queue for info
 
     DEBUG_WRAP(DebugMessage(DEBUG_INIT, "Output: hpfeeds Initialized\n"););
 
@@ -436,7 +435,7 @@ static void AlertHPFeedsInit(struct _SnortConfig *sc, char *args)
         LogMessage("Successfully created RuleUpdateThread!\n");
     }
     //insert a thread for sending info
-    if (pthread_create(&thread2, NULL, SendThread, config) != 0)
+    if (pthread_create(&thread2, NULL, SendThread, config, queue) != 0)
     {
         LogMessage("Failed to create SendThread!\n");
     }
