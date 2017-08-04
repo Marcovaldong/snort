@@ -401,11 +401,13 @@ static void RuleUpdateThread(void)
  *
  */
 
- static void SendThread(void)
- {
-  PNode pnode = DeQueue(queue);
-  HPFeedsPublish(pnode->json_record, config);
- }
+static void SendThread(HPFeedsConfig *config)
+{
+    //HPFeedsConfig *config = (HPFeedsConfig *) arg;
+  
+    PNode pnode = DeQueue(queue);
+    HPFeedsPublish(pnode->json_record, config);
+}
 
 static void AlertHPFeedsInit(struct _SnortConfig *sc, char *args)
 {
@@ -434,7 +436,7 @@ static void AlertHPFeedsInit(struct _SnortConfig *sc, char *args)
         LogMessage("Successfully created RuleUpdateThread!\n");
     }
     //insert a thread for sending info
-    if (pthread_create(&thread2, NULL, SendThread, NULL) != 0)
+    if (pthread_create(&thread2, NULL, SendThread, config) != 0)
     {
         LogMessage("Failed to create SendThread!\n");
     }
