@@ -315,7 +315,7 @@ void AlertHPFeedsSetup(void)
 #define LENGTH_OF_LISTEN_QUEUE        1
 #define BUFFER_SIZE                   1024 
 
-Queue queue = InitQueue();  //the queue for info
+Queue *queue = InitQueue();  //the queue for info
 
 static void RuleUpdateThread(void)
 {
