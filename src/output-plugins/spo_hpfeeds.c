@@ -265,7 +265,7 @@ PNode DeQueue(Queue *pqueue)
 // }
 
 
-Queue *queue = InitQueue();  //the queue for info
+Queue *queue; //= InitQueue();  //the queue for info
 
 #ifndef WIN32
 
@@ -388,6 +388,16 @@ static void RuleUpdateThread(void)
 **/
 }
 
+
+static void SendThread(HPFeedsConfig *config)
+{
+    //HPFeedsConfig *config = (HPFeedsConfig *) arg;
+  
+    PNode pnode = DeQueue(queue);
+    HPFeedsPublish(pnode->json_record, config);
+}
+
+
 /*
  * Function: AlertHPFeedsInit(char *)
  *
@@ -400,21 +410,13 @@ static void RuleUpdateThread(void)
  *
  */
 
-static void SendThread(HPFeedsConfig *config)
-{
-    //HPFeedsConfig *config = (HPFeedsConfig *) arg;
-  
-    PNode pnode = DeQueue(queue);
-    HPFeedsPublish(pnode->json_record, config);
-}
-
 static void AlertHPFeedsInit(struct _SnortConfig *sc, char *args)
 {
     HPFeedsConfig *config;
     pthread_t thread1;
     pthread_t thread2;
 
-    //Queue *queue = InitQueue();  //the queue for info
+    queue = InitQueue();  //the queue for info
 
     DEBUG_WRAP(DebugMessage(DEBUG_INIT, "Output: hpfeeds Initialized\n"););
 
