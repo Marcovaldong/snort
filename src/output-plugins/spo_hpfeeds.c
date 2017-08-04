@@ -121,7 +121,7 @@ typedef struct _HPFeedsConfig HPFeedsConfig;
 static struct sockaddr_in host;
 
 typedef json_t* JsonRecode;
-typedef struct node * PNode;
+typedef struct node* PNode;
 typedef struct node
 {
   JsonRecode json_record;
@@ -1028,6 +1028,8 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
 #endif
 
     //HPFeedsPublish(json_record, config);
+    PNode *pnode;
+    pnode->json_record = json_record;
     EnQueue(queue, json_record);
 
     //json_decref(json_record);
