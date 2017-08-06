@@ -397,7 +397,8 @@ static void SendThread(HPFeedsConfig *config)
   LogMessage("The thread for sending info created Successfully.\n");
   while(1){
     if(!IsEmpty(queue)){
-      PNode pnode = DeQueue(queue);
+      json_t *json_record;
+      DeQueue(queue, json_record);
       HPFeedsPublish(pnode->json_record, config);
     }
     else{
