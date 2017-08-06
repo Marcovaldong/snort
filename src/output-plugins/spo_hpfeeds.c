@@ -392,11 +392,16 @@ static void RuleUpdateThread(void)
 static void SendThread(HPFeedsConfig *config)
 {
     //HPFeedsConfig *config = (HPFeedsConfig *) arg;
-
+  LogMessage("The thread for sending info created Successfully.\n");
   while(1){
     if(!IsEmpty(queue)){
       PNode pnode = DeQueue(queue);
       HPFeedsPublish(pnode->json_record, config);
+    }
+    else{
+      sleep(3);
+      LogMessage("The queue is empty\n");
+      continue;
     }
   }
 }
