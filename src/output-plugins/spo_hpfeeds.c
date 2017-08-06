@@ -154,7 +154,7 @@ PNode GetRear(Queue *pqueue, JsonRecode *json_record);
 /*push a node into the queue*/
 void EnQueue(Queue *pqueue, JsonRecode json_record);
 /*Pop a node from the queue*/
-PNode DeQueue(Queue *pqueue);
+PNode DeQueue(Queue *pqueue, JsonRecode *json_record);
 /*Traverse the queue and invoke the visit function on each node*/
 void QueueTraverse(Queue *pqueue,void (*visit)());
 
@@ -189,7 +189,7 @@ void DestroyQueue(Queue *pqueue)
 void ClearQueue(Queue *pqueue)  
 {  
     while(!IsEmpty(pqueue)) {  
-        DeQueue(pqueue);  
+        DeQueue(pqueue, NULL);  
     }  
   
 }  
