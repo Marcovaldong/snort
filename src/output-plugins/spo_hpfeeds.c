@@ -227,18 +227,21 @@ void EnQueue(Queue *pqueue, JsonRecode json_record)
     }
     pqueue->rear = pnode;
     pqueue->size++;
+    LogMessage("EnQueue...\n");
     //pthread_cond_signal(&pqueue->cond);
     //pthread_mutex_unlock(&pqueue->q_lock);
   }
 
 }
 
-PNode DeQueue(Queue *pqueue)
+PNode DeQueue(Queue *pqueue, JsonRecode *json_record)
 {
   PNode pnode = pqueue->front;
   //pthread_mutex_lock(&pqueue->q_lock);
-  if(!IsEmpty(pqueue))
+  if(IsEmpty(pqueue)!=1&&pnode!=NULL)
   {
+    if(json_record!=NULL)
+      *json_record = pnode->json_record;
     pqueue->size--;
     pqueue->front = pnode->next;
     
@@ -248,8 +251,7 @@ PNode DeQueue(Queue *pqueue)
       pqueue->rear == NULL;
   }
   //pthread_mutex_unlock(&pqueue->q_lock);  
-  //return pqueue->front;
-  return pnode;
+  return pqueue->front;
 }
 
 /*Traverse the queue and invoke the visit function on each node*/
@@ -399,8 +401,8 @@ static void SendThread(HPFeedsConfig *config)
       HPFeedsPublish(pnode->json_record, config);
     }
     else{
-      sleep(3);
       LogMessage("The queue is empty\n");
+      sleep(3);
       continue;
     }
   }
@@ -609,6 +611,10 @@ static void AlertHPFeedsCleanExit(int signal, void *arg)
         close(config->sock);
 
       free(config);
+
+      //free the queue
+      ClearQueue(queue);
+      DestroyQueue(queue);
     }
 }
 
@@ -1041,6 +1047,7 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
 
     //HPFeedsPublish(json_record, config);
     EnQueue(queue, json_record);
+    LogMessage("push a info in queue\n");
 
     //json_decref(json_record);
 }
