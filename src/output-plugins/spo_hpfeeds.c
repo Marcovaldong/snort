@@ -148,13 +148,13 @@ int IsEmpty(Queue *pqueue);
 /*Get the front node from the queue*/
 /*Get the size of the queue*/
 int GetSize(Queue *pqueue);
-PNode GetFront(Queue *pqueue, JsonRecode *json_record);
+PNode GetFront(Queue *pqueue, JsonRecode json_record);
 /*Get the rear node from the queue*/
-PNode GetRear(Queue *pqueue, JsonRecode *json_record);
+PNode GetRear(Queue *pqueue, JsonRecode json_record);
 /*push a node into the queue*/
 void EnQueue(Queue *pqueue, JsonRecode json_record);
 /*Pop a node from the queue*/
-PNode DeQueue(Queue *pqueue, JsonRecode *json_record);
+PNode DeQueue(Queue *pqueue, JsonRecode json_record);
 /*Traverse the queue and invoke the visit function on each node*/
 void QueueTraverse(Queue *pqueue,void (*visit)());
 
@@ -249,7 +249,7 @@ PNode DeQueue(Queue *pqueue, JsonRecode *json_record)
     json_decref(pnode->json_record); 
     free(pnode);
     if(pqueue->size==0)
-      pqueue->rear == NULL;
+      pqueue->rear = NULL;
   }
   //pthread_mutex_unlock(&pqueue->q_lock);  
   return pqueue->front;
@@ -398,9 +398,11 @@ static void SendThread(HPFeedsConfig *config)
   LogMessage("The thread for sending info created Successfully.\n");
   while(1){
     if(!IsEmpty(queue)){
+      LogMessage("starting to dequeue");
       json_t *json_record = json_object();
       DeQueue(queue, json_record);
       HPFeedsPublish(json_record, config);
+      LogMessage("finished publish...");
     }
     else{
       LogMessage("The queue is empty\n");
