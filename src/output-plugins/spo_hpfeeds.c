@@ -215,7 +215,10 @@ void EnQueue(Queue *pqueue, JsonRecode json_record)
   PNode pnode = (PNode)malloc(sizeof(Node));
   if (pnode != NULL){
     printf("pnode isn't NULL\n");
+    pnode->json_record = json_object();
     pnode->json_record = json_record;
+    // char *data = json_dumps(pnode->json_record, 0);
+    // printf("%s\n", (u_char *)data);
     pnode->next = NULL;
 
     //pthread_mutex_lock(&pqueue->q_lock);
@@ -242,11 +245,16 @@ PNode DeQueue(Queue *pqueue, JsonRecode *json_record)
   if(IsEmpty(pqueue)!=1&&pnode!=NULL)
   {
     if(json_record!=NULL)
+      printf("hehe\n");
+      //printf(pnode->json_record->type);
+      //char *data = json_dumps(pnode->json_record, 0);
+      //printf("%s\n", (u_char *)data);
       *json_record = pnode->json_record;
+      
     pqueue->size--;
     pqueue->front = pnode->next;
     
-    json_decref(pnode->json_record); 
+    //json_decref(pnode->json_record); 
     free(pnode);
     if(pqueue->size==0)
       pqueue->rear = NULL;
@@ -379,7 +387,7 @@ static void RuleUpdateThread(void)
         //close(remote_socket);
         LogMessage("Updating Rules\n");
         system("/opt/mhn/rules/update_snort_rules.sh");
-    //int len = send(remote_socket, "Update rules successly");  //send back info
+    //send(remote_socket, "Update rules successly");  //send back info
     close(remote_socket);
     }
 /**
@@ -398,11 +406,11 @@ static void SendThread(HPFeedsConfig *config)
   LogMessage("The thread for sending info created Successfully.\n");
   while(1){
     if(!IsEmpty(queue)){
-      LogMessage("starting to dequeue");
+      LogMessage("starting to dequeue\n");
       json_t *json_record = json_object();
-      DeQueue(queue, json_record);
+      c(queue, json_record);
       HPFeedsPublish(json_record, config);
-      LogMessage("finished publish...");
+      LogMessage("finished publish...\n");
     }
     else{
       LogMessage("The queue is empty\n");
@@ -1008,7 +1016,7 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
 
 
         snprintf(construct_buf, BUF_LEN , "0x%X", p->trhllc->ssap);
-        json_object_set_new(json_record, "tr_ssap", json_string((char *)construct_buf));
+        json_object_set_new(json_record, "tr_ssap", json_string((char *)HPconstruct_buf));
 
 
         snprintf(construct_buf, BUF_LEN , "%X%X%X", p->trhllc->protid[0],
@@ -1050,6 +1058,7 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
 #endif
 
     //HPFeedsPublish(json_record, config);
+    //printf("%s\n", json_object_get(json_record, "header"));
     EnQueue(queue, json_record);
     LogMessage("push a info in queue\n");
 
@@ -1275,7 +1284,7 @@ void HPFeedsPublish(json_t *json, HPFeedsConfig *config)
 
   char *data = json_dumps(json, 0);
   unsigned int len = strlen(data);
-
+  //printf("%d\n", &len);
   hpf_msg_t *msg;
 
   msg = hpf_msg_publish((u_char *)config->hpfeeds_ident, strlen(config->hpfeeds_ident) \
