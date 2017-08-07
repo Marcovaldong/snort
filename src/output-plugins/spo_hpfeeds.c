@@ -120,7 +120,8 @@ typedef struct _HPFeedsConfig HPFeedsConfig;
 
 static struct sockaddr_in host;
 
-typedef json_t* JsonRecode;
+//typedef json_t* JsonRecode;
+typedef char* JsonRecode;
 typedef struct node* PNode;
 typedef struct node
 {
@@ -215,10 +216,7 @@ void EnQueue(Queue *pqueue, JsonRecode json_record)
   PNode pnode = (PNode)malloc(sizeof(Node));
   if (pnode != NULL){
     printf("pnode isn't NULL\n");
-    pnode->json_record = json_object();
     pnode->json_record = json_record;
-    // char *data = json_dumps(pnode->json_record, 0);
-    // printf("%s\n", (u_char *)data);
     pnode->next = NULL;
 
     //pthread_mutex_lock(&pqueue->q_lock);
@@ -245,16 +243,10 @@ PNode DeQueue(Queue *pqueue, JsonRecode *json_record)
   if(IsEmpty(pqueue)!=1&&pnode!=NULL)
   {
     if(json_record!=NULL)
-      printf("hehe\n");
-      //printf(pnode->json_record->type);
-      //char *data = json_dumps(pnode->json_record, 0);
-      //printf("%s\n", (u_char *)data);
       *json_record = pnode->json_record;
       
     pqueue->size--;
     pqueue->front = pnode->next;
-    
-    //json_decref(pnode->json_record); 
     free(pnode);
     if(pqueue->size==0)
       pqueue->rear = NULL;
@@ -406,14 +398,13 @@ static void SendThread(HPFeedsConfig *config)
   LogMessage("The thread for sending info created Successfully.\n");
   while(1){
     if(!IsEmpty(queue)){
-      LogMessage("starting to dequeue\n");
-      json_t *json_record = json_object();
-      c(queue, json_record);
-      HPFeedsPublish(json_record, config);
-      LogMessage("finished publish...\n");
+      char* data;
+      DeQueue(q, &data);
+      HPFeedsPublish(data, config);
+      //LogMessage("finished publish...\n");
     }
     else{
-      LogMessage("The queue is empty\n");
+      //LogMessage("The queue is empty\n");
       sleep(3);
       continue;
     }
@@ -1058,10 +1049,8 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
 #endif
 
     //HPFeedsPublish(json_record, config);
-    //printf("%s\n", json_object_get(json_record, "header"));
-    EnQueue(queue, json_record);
-    LogMessage("push a info in queue\n");
-
+    char* data = json_dumps(json_record, 0);
+    EnQueue(queue, data);
     json_decref(json_record);
 }
 
@@ -1282,7 +1271,8 @@ void HPFeedsConnect(HPFeedsConfig *config, int reconnect)
 void HPFeedsPublish(json_t *json, HPFeedsConfig *config)
 {
 
-  char *data = json_dumps(json, 0);
+  //char *data = json_dumps(json, 0);
+  char *data = json;
   unsigned int len = strlen(data);
   //printf("%d\n", &len);
   hpf_msg_t *msg;
