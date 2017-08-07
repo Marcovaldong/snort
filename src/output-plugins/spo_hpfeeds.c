@@ -214,6 +214,7 @@ void EnQueue(Queue *pqueue, JsonRecode json_record)
 {
   PNode pnode = (PNode)malloc(sizeof(Node));
   if (pnode != NULL){
+    printf("pnode isn't NULL\n");
     pnode->json_record = json_record;
     pnode->next = NULL;
 
@@ -397,9 +398,9 @@ static void SendThread(HPFeedsConfig *config)
   LogMessage("The thread for sending info created Successfully.\n");
   while(1){
     if(!IsEmpty(queue)){
-      json_t *json_record;
+      json_t *json_record = json_object();
       DeQueue(queue, json_record);
-      HPFeedsPublish(pnode->json_record, config);
+      HPFeedsPublish(json_record, config);
     }
     else{
       LogMessage("The queue is empty\n");
@@ -1050,7 +1051,7 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
     EnQueue(queue, json_record);
     LogMessage("push a info in queue\n");
 
-    //json_decref(json_record);
+    json_decref(json_record);
 }
 
 
