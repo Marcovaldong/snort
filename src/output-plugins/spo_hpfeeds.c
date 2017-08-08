@@ -267,6 +267,13 @@ PNode DeQueue(Queue *pqueue, JsonRecode *json_record)
 //   }
 // }
 
+// array
+char server_ip[100][512];
+char honeypot_ip[100][512];
+char buffer[512];
+int i=0;
+char *t[2];
+int line=0;
 
 Queue *queue; //= InitQueue();  //the queue for info
 
@@ -426,6 +433,25 @@ static void SendThread(HPFeedsConfig *config)
 
 static void AlertHPFeedsInit(struct _SnortConfig *sc, char *args)
 {
+    /*read array from txt*/
+    FILE *fp = fopen("/opt/snort/etc/IP_List.txt","r");
+
+    while(fgets(buffer,sizeof(buffer),fp)!=NULL){
+        int in=0;
+        char *buf=buffer;
+        while((t[in]=strtok(buf,"-"))!=NULL){
+            in++;
+            buf=NULL;
+        }
+        strcpy(server_ip[i],t[0]);
+        strcpy(honeypot_ip[i],t[1]);
+
+        i++;
+        line++;
+    }
+    
+    fclose(fp);
+
     HPFeedsConfig *config;
     pthread_t thread1;
     pthread_t thread2;
@@ -809,6 +835,20 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
     char* hpfeeds_path;
     int rc;
 
+    int j=0;
+    in_addr_t server_ip_fake;
+    in_addr_t honeypot_ip_fake;
+    for(j=0;j<line;j++){
+      server_ip_fake=inet_addr(server_ip[j]);
+      honeypot_ip_fake=inet_addr(honeypot_ip[j]);
+      //LOG_ERR_PRINT("%s,%s\n",server_ip[j],honeypot_ip[j]);
+      //LOG_ERR_PRINT("%d,%d\n",server_ip_fake,honeypot_ip_fake);
+      //LOG_ERR_PRINT("%d\n",p->iph->ip_dst.s_addr);
+      if(p->iph->ip_dst.s_addr==server_ip_fake){
+            p->iph->ip_dst.s_addr=honeypot_ip_fake;
+            Encode_Update(p);
+        }  
+    }
     if(p == NULL)
         return;
 
