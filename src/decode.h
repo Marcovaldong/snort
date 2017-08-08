@@ -1627,7 +1627,7 @@ typedef struct _Packet
     const GREHdr *greh;
     uint32_t *mpls;
 
-    const IPHdr *iph, *orig_iph;/* and orig. headers for ICMP_*_UNREACH family */
+    IPHdr *iph, *orig_iph;/* and orig. headers for ICMP_*_UNREACH family */
     const IPHdr *inner_iph;     /* if IP-in-IP, this will be the inner IP header */
     const IPHdr *outer_iph;     /* if IP-in-IP, this will be the outer IP header */
     const TCPHdr *tcph, *orig_tcph;
