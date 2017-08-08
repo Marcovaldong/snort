@@ -155,7 +155,7 @@ PNode GetRear(Queue *pqueue, JsonRecode json_record);
 /*push a node into the queue*/
 void EnQueue(Queue *pqueue, JsonRecode json_record);
 /*Pop a node from the queue*/
-PNode DeQueue(Queue *pqueue, JsonRecode json_record);
+PNode DeQueue(Queue *pqueue, JsonRecode *json_record);
 /*Traverse the queue and invoke the visit function on each node*/
 void QueueTraverse(Queue *pqueue,void (*visit)());
 
@@ -215,7 +215,7 @@ void EnQueue(Queue *pqueue, JsonRecode json_record)
 {
   PNode pnode = (PNode)malloc(sizeof(Node));
   if (pnode != NULL){
-    printf("pnode isn't NULL\n");
+    //printf("pnode isn't NULL\n");
     pnode->json_record = json_record;
     pnode->next = NULL;
 
@@ -229,7 +229,7 @@ void EnQueue(Queue *pqueue, JsonRecode json_record)
     }
     pqueue->rear = pnode;
     pqueue->size++;
-    LogMessage("EnQueue...\n");
+    //LogMessage("EnQueue...\n");
     //pthread_cond_signal(&pqueue->cond);
     //pthread_mutex_unlock(&pqueue->q_lock);
   }
@@ -399,13 +399,13 @@ static void SendThread(HPFeedsConfig *config)
   while(1){
     if(!IsEmpty(queue)){
       char* data;
-      DeQueue(q, &data);
+      DeQueue(queue, &data);
       HPFeedsPublish(data, config);
       //LogMessage("finished publish...\n");
     }
     else{
       //LogMessage("The queue is empty\n");
-      sleep(3);
+      sleep(1);
       continue;
     }
   }
