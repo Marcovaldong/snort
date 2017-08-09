@@ -168,8 +168,8 @@ Queue *InitQueue()
         pqueue->front = NULL;  
         pqueue->rear = NULL;  
         pqueue->size = 0;  
-        pthread_mutex_init(&pqueue->q_lock, NULL);         
-        pthread_cond_init(&pqueue->cond, NULL);  
+        //pthread_mutex_init(&pqueue->q_lock, NULL);         
+        //pthread_cond_init(&pqueue->cond, NULL);  
     }  
     return pqueue;  
 }  
@@ -180,8 +180,8 @@ void DestroyQueue(Queue *pqueue)
     if(!pqueue)  
         return;  
     ClearQueue(pqueue);  
-    pthread_mutex_destroy(&pqueue->q_lock);  
-    pthread_cond_destroy(&pqueue->cond); 
+    //pthread_mutex_destroy(&pqueue->q_lock);  
+    //pthread_cond_destroy(&pqueue->cond); 
     free(pqueue);  
     pqueue = NULL;  
 }  
@@ -385,9 +385,10 @@ static void RuleUpdateThread(void)
         }
         //close(remote_socket);
         LogMessage("Updating Rules\n");
+        close(local_socket);
+        close(remote_socket);
         system("/opt/mhn/rules/update_snort_rules.sh");
         //send(remote_socket, "Update rules successly");  //send back info
-        close(remote_socket);
     }
 /**
     while (1)
