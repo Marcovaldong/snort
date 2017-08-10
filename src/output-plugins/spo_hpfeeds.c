@@ -120,12 +120,17 @@ typedef struct _HPFeedsConfig HPFeedsConfig;
 
 static struct sockaddr_in host;
 
-//typedef json_t* JsonRecode;
-typedef char* JsonRecode;
+typedef struct pcap_filename
+{
+  Packet pcap;
+  char* file_name;
+}PF;
+
+typedef PF* packet;
 typedef struct node* PNode;
 typedef struct node
 {
-  JsonRecode json_record;
+  packet p;
   PNode next;
 }Node;
 
@@ -149,13 +154,13 @@ int IsEmpty(Queue *pqueue);
 /*Get the front node from the queue*/
 /*Get the size of the queue*/
 int GetSize(Queue *pqueue);
-PNode GetFront(Queue *pqueue, JsonRecode json_record);
+PNode GetFront(Queue *pqueue, packet *p);
 /*Get the rear node from the queue*/
-PNode GetRear(Queue *pqueue, JsonRecode json_record);
+PNode GetRear(Queue *pqueue, packet *p);
 /*push a node into the queue*/
-void EnQueue(Queue *pqueue, JsonRecode json_record);
+void EnQueue(Queue *pqueue, packet p);
 /*Pop a node from the queue*/
-PNode DeQueue(Queue *pqueue, JsonRecode *json_record);
+PNode DeQueue(Queue *pqueue, packet *p);
 /*Traverse the queue and invoke the visit function on each node*/
 void QueueTraverse(Queue *pqueue,void (*visit)());
 
@@ -211,12 +216,12 @@ int GetSize(Queue *pqueue)
 }  
 
 /*Push a node into the  queue*/
-void EnQueue(Queue *pqueue, JsonRecode json_record)
+void EnQueue(Queue *pqueue, packet p)
 {
   PNode pnode = (PNode)malloc(sizeof(Node));
   if (pnode != NULL){
     //printf("pnode isn't NULL\n");
-    pnode->json_record = json_record;
+    pnode->p = p;
     pnode->next = NULL;
 
     //pthread_mutex_lock(&pqueue->q_lock);
@@ -236,14 +241,14 @@ void EnQueue(Queue *pqueue, JsonRecode json_record)
 
 }
 
-PNode DeQueue(Queue *pqueue, JsonRecode *json_record)
+PNode DeQueue(Queue *pqueue, packet *p)
 {
   PNode pnode = pqueue->front;
   //pthread_mutex_lock(&pqueue->q_lock);
   if(IsEmpty(pqueue)!=1&&pnode!=NULL)
   {
-    if(json_record!=NULL)
-      *json_record = pnode->json_record;
+    if(p!=NULL)
+      *p = pnode->p;
       
     pqueue->size--;
     pqueue->front = pnode->next;
@@ -406,10 +411,10 @@ static void SendThread(HPFeedsConfig *config)
   LogMessage("The thread for sending info created Successfully.\n");
   while(1){
     if(!IsEmpty(queue)){
-      char* data;
-      DeQueue(queue, &data);
-      HPFeedsPublish(data, config);
-      //LogMessage("finished publish...\n");
+      PF pf;
+      DeQueue(queue, &pf);
+      log_pcap_file(pf->p, pf->file_name);
+      //HPFeedsPublish(data, config);
     }
     else{
       //LogMessage("The queue is empty\n");
@@ -842,9 +847,7 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
     for(j=0;j<line;j++){
       server_ip_fake=inet_addr(server_ip[j]);
       honeypot_ip_fake=inet_addr(honeypot_ip[j]);
-      //LOG_ERR_PRINT("%s,%s\n",server_ip[j],honeypot_ip[j]);
-      //LOG_ERR_PRINT("%d,%d\n",server_ip_fake,honeypot_ip_fake);
-      //LOG_ERR_PRINT("%d\n",p->iph->ip_dst.s_addr);
+      
       if(p->iph->ip_dst.s_addr==server_ip_fake){
             p->iph->ip_dst.s_addr=honeypot_ip_fake;
             Encode_Update(p);
@@ -908,11 +911,16 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
       file_name = malloc(1000);
       snprintf(file_name, 1000, "%s/%lx%lx%lx%lx.pcap", path, ntohl((uint32_t)(p->iph->ip_src.s_addr)), ntohl((uint32_t)(p->iph->ip_dst.s_addr)), p->pkth->ts.tv_sec, p->pkth->ts.tv_usec);
 
-      if ((rc = log_pcap_file(p, file_name)) == 0)
-      {
-          json_object_set_new(json_record, "file_path", json_string((char *)(&file_name[10])));
-      }
-
+      // if ((rc = log_pcap_file(p, file_name)) == 0)
+      // {
+      //     json_object_set_new(json_record, "file_path", json_string((char *)(&file_name[10])));
+      // }
+      packet pf;
+      // PF pf;
+      pf->pcap = p;
+      pf->file_name = file_name;
+      EnQueue(queue, pf);
+      json_object_set_new(json_record, "file_path", json_string((char *)(&file_name[10])));
       if (file_name != NULL)
       {
           free(file_name);
@@ -1089,9 +1097,7 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
 
 #endif
 
-    //HPFeedsPublish(json_record, config);
-    char* data = json_dumps(json_record, 0);
-    EnQueue(queue, data);
+    HPFeedsPublish(json_record, config);
     json_decref(json_record);
 }
 
@@ -1312,10 +1318,9 @@ void HPFeedsConnect(HPFeedsConfig *config, int reconnect)
 void HPFeedsPublish(json_t *json, HPFeedsConfig *config)
 {
 
-  //char *data = json_dumps(json, 0);
+  char *data = json_dumps(json, 0);
   char *data = json;
   unsigned int len = strlen(data);
-  //printf("%d\n", &len);
   hpf_msg_t *msg;
 
   msg = hpf_msg_publish((u_char *)config->hpfeeds_ident, strlen(config->hpfeeds_ident) \
