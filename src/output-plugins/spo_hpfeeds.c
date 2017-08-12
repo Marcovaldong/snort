@@ -129,12 +129,13 @@ typedef struct
 
 }packet;
 
+typedef packet* Pcap;
 typedef char* FileName;
 
 typedef struct node* PNode;
 typedef struct node
 {
-  packet* pcap;
+  Pcap pcap;
   FileName file_name;
   PNode next;
 }Node;
@@ -159,13 +160,13 @@ int IsEmpty(Queue *pqueue);
 /*Get the front node from the queue*/
 /*Get the size of the queue*/
 int GetSize(Queue *pqueue);
-PNode GetFront(Queue *pqueue, packet *pcap, FileName *file_name);
+PNode GetFront(Queue *pqueue, Pcap *pcap, FileName *file_name);
 /*Get the rear node from the queue*/
-PNode GetRear(Queue *pqueue, packet *pcap, FileName *file_name);
+PNode GetRear(Queue *pqueue, Pcap *pcap, FileName *file_name);
 /*push a node into the queue*/
-void EnQueue(Queue *pqueue, packet pcap, FileName file_name);
+void EnQueue(Queue *pqueue, Pcap pcap, FileName file_name);
 /*Pop a node from the queue*/
-PNode DeQueue(Queue *pqueue, packet *pcap, FileName *file_name);
+PNode DeQueue(Queue *pqueue, Pcap *pcap, FileName *file_name);
 /*Traverse the queue and invoke the visit function on each node*/
 void QueueTraverse(Queue *pqueue,void (*visit)());
 
@@ -225,11 +226,12 @@ void EnQueue(Queue *pqueue, packet pcap, FileName file_name)
 {
   PNode pnode = (PNode)malloc(sizeof(Node));
   pnode->file_name = malloc(1000);
-  pnode->pcap = (packet *)malloc(sizeof(packet));
+  //pnode->pcap = (packet)malloc(sizeof(packet));
+  pnode->pcap.
   if (pnode != NULL){
     //printf("pnode isn't NULL\n");
-    *(pnode->pcap) = *pcap;
-    *(pnode->file_name) = *file_name;
+    pnode->pcap = pcap;
+    strcpy(pnode->file_name, file_name);
     pnode->next = NULL;
 
     //pthread_mutex_lock(&pqueue->q_lock);
@@ -261,7 +263,7 @@ PNode DeQueue(Queue *pqueue, packet *pcap, FileName *file_name)
       
     pqueue->size--;
     pqueue->front = pnode->next;
-    free(pnode);
+    //free(pnode);
     if(pqueue->size==0)
       pqueue->rear = NULL;
   }
@@ -424,7 +426,7 @@ static void SendThread(HPFeedsConfig *config)
   while(1){
     if(!IsEmpty(queue)){
       //PF* pf = (PF *)malloc(sizeof(PF));
-      Packet* pcap;
+      
       char* file_name = malloc(1000);
       DeQueue(queue, &pcap, &file_name);
       printf("dequeue--file_name: %s\n", file_name);
@@ -934,11 +936,15 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
       //pf->pcap = p;
       //pf->file_name = file_name;
 
-      packet pcap = (packet)malloc(sizeof(packet));
-      pcap.pkth = p->pkth;
-      pcap.pkt = p->pkt;
-      pcap.eh = p->eh;
-      pcap.iph = p->iph;
+      packet* pcap //= (packet)malloc(sizeof(packet));
+      pcap->pkth = (DAQ_PktHdr_t *)malloc(sizeof(DAQ_PktHdr_t));
+      pcap->pkt = (uint8_t *)malloc(sizeof(uint8_t));
+      pcap->eh = (EtherHdr *)malloc(sizeof(EtherHdr));
+      pcap->iph = (IPHdr *)malloc(sizeof(IPHdr));
+      *(pcap->pkth) = *(p->pkth);
+      *(pcap->pkt) = *(p->pkt);
+      *(pcap->eh) = *(p->eh);
+      *(pcap->iph) = *(p->iph);
       EnQueue(queue, pcap, file_name);
       json_object_set_new(json_record, "file_path", json_string((char *)(&file_name[10])));
       if (file_name != NULL)
