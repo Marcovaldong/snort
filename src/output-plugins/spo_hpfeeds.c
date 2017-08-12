@@ -120,13 +120,21 @@ typedef struct _HPFeedsConfig HPFeedsConfig;
 
 static struct sockaddr_in host;
 
-typedef Packet* packet;
+typedef struct 
+{
+  const DAQ_PktHdr_t *pkth; // packet meta data
+  const uint8_t *pkt;         // raw packet data
+  const EtherHdr *eh;         /* standard TCP/IP/Ethernet/ARP headers */
+  IPHdr *iph;   /* and orig. headers for ICMP_*_UNREACH family */
+
+}packet;
+
 typedef char* FileName;
 
 typedef struct node* PNode;
 typedef struct node
 {
-  paket pcap;
+  packet* pcap;
   FileName file_name;
   PNode next;
 }Node;
@@ -192,7 +200,7 @@ void DestroyQueue(Queue *pqueue)
 void ClearQueue(Queue *pqueue)  
 {  
     while(!IsEmpty(pqueue)) {  
-        DeQueue(pqueue, NULL);  
+        DeQueue(pqueue, NULL, NULL);  
     }  
   
 }  
@@ -216,10 +224,12 @@ int GetSize(Queue *pqueue)
 void EnQueue(Queue *pqueue, packet pcap, FileName file_name)
 {
   PNode pnode = (PNode)malloc(sizeof(Node));
+  pnode->file_name = malloc(1000);
+  pnode->pcap = (packet *)malloc(sizeof(packet));
   if (pnode != NULL){
     //printf("pnode isn't NULL\n");
-    pnode->pcap = pcap;
-    pnode->file_name = file_name;
+    *(pnode->pcap) = *pcap;
+    *(pnode->file_name) = *file_name;
     pnode->next = NULL;
 
     //pthread_mutex_lock(&pqueue->q_lock);
@@ -245,9 +255,9 @@ PNode DeQueue(Queue *pqueue, packet *pcap, FileName *file_name)
   //pthread_mutex_lock(&pqueue->q_lock);
   if(IsEmpty(pqueue)!=1&&pnode!=NULL)
   {
-    if(p!=NULL)
+    if(pcap!=NULL&&file_name!=NULL)
       *pcap = pnode->pcap;
-      *file_name = pnode->FileName;
+      *file_name = pnode->file_name;
       
     pqueue->size--;
     pqueue->front = pnode->next;
@@ -415,7 +425,7 @@ static void SendThread(HPFeedsConfig *config)
     if(!IsEmpty(queue)){
       //PF* pf = (PF *)malloc(sizeof(PF));
       Packet* pcap;
-      char* file_name;
+      char* file_name = malloc(1000);
       DeQueue(queue, &pcap, &file_name);
       printf("dequeue--file_name: %s\n", file_name);
       //log_pcap_file(pf->pcap, pf->file_name);
@@ -924,13 +934,18 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
       //pf->pcap = p;
       //pf->file_name = file_name;
 
-      EnQueue(queue, p, file_name);
+      packet pcap = (packet)malloc(sizeof(packet));
+      pcap.pkth = p->pkth;
+      pcap.pkt = p->pkt;
+      pcap.eh = p->eh;
+      pcap.iph = p->iph;
+      EnQueue(queue, pcap, file_name);
       json_object_set_new(json_record, "file_path", json_string((char *)(&file_name[10])));
       if (file_name != NULL)
       {
           free(file_name);
       }
- 
+
       if (path != NULL)
       {
           free(path);
