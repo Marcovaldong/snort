@@ -426,7 +426,7 @@ static void SendThread(HPFeedsConfig *config)
   while(1){
     if(!IsEmpty(queue)){
       //PF* pf = (PF *)malloc(sizeof(PF));
-      
+      packet* pcap = (packet *)malloc(sizeof(packet));
       char* file_name = malloc(1000);
       DeQueue(queue, &pcap, &file_name);
       printf("dequeue--file_name: %s\n", file_name);
