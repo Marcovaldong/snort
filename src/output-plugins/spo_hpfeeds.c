@@ -122,9 +122,9 @@ static struct sockaddr_in host;
 
 typedef struct 
 {
-  const DAQ_PktHdr_t *pkth; // packet meta data
-  const uint8_t *pkt;         // raw packet data
-  const EtherHdr *eh;         /* standard TCP/IP/Ethernet/ARP headers */
+  DAQ_PktHdr_t *pkth; // packet meta data
+  uint8_t *pkt;         // raw packet data
+  EtherHdr *eh;         /* standard TCP/IP/Ethernet/ARP headers */
   IPHdr *iph;   /* and orig. headers for ICMP_*_UNREACH family */
 
 }packet;
@@ -222,14 +222,11 @@ int GetSize(Queue *pqueue)
 }  
 
 /*Push a node into the  queue*/
-void EnQueue(Queue *pqueue, packet pcap, FileName file_name)
+void EnQueue(Queue *pqueue, Pcap pcap, FileName file_name)
 {
   PNode pnode = (PNode)malloc(sizeof(Node));
   pnode->file_name = malloc(1000);
-  //pnode->pcap = (packet)malloc(sizeof(packet));
-  pnode->pcap.
   if (pnode != NULL){
-    //printf("pnode isn't NULL\n");
     pnode->pcap = pcap;
     strcpy(pnode->file_name, file_name);
     pnode->next = NULL;
@@ -244,14 +241,13 @@ void EnQueue(Queue *pqueue, packet pcap, FileName file_name)
     }
     pqueue->rear = pnode;
     pqueue->size++;
-    //LogMessage("EnQueue...\n");
     //pthread_cond_signal(&pqueue->cond);
     //pthread_mutex_unlock(&pqueue->q_lock);
   }
 
 }
 
-PNode DeQueue(Queue *pqueue, packet *pcap, FileName *file_name)
+PNode DeQueue(Queue *pqueue, Pcap *pcap, FileName *file_name)
 {
   PNode pnode = pqueue->front;
   //pthread_mutex_lock(&pqueue->q_lock);
@@ -263,7 +259,7 @@ PNode DeQueue(Queue *pqueue, packet *pcap, FileName *file_name)
       
     pqueue->size--;
     pqueue->front = pnode->next;
-    //free(pnode);
+    free(pnode);
     if(pqueue->size==0)
       pqueue->rear = NULL;
   }
@@ -304,7 +300,7 @@ static void HPFeedsAlert(Packet *, char *, void *, Event *);
 void HPFeedsPublish(json_t *json, HPFeedsConfig *config);
 void HPFeedsConnect(HPFeedsConfig *config, int reconnect);
 
-static int log_pcap_file(Packet* p, char* file_name);
+static int log_pcap_file(packet* p, char* file_name);
 static int pcap_file_send(char* file_name, FILE* fp);
 
 #endif
@@ -421,16 +417,14 @@ static void RuleUpdateThread(void)
 
 static void SendThread(HPFeedsConfig *config)
 {
-    //HPFeedsConfig *config = (HPFeedsConfig *) arg;
-  LogMessage("The thread for sending info created Successfully.\n");
+  //LogMessage("The thread for sending info created Successfully.\n");
+  packet* pcap = (packet *)malloc(sizeof(packet));
+  char* file_name = malloc(1000);
   while(1){
     if(!IsEmpty(queue)){
-      //PF* pf = (PF *)malloc(sizeof(PF));
-      packet* pcap = (packet *)malloc(sizeof(packet));
-      char* file_name = malloc(1000);
       DeQueue(queue, &pcap, &file_name);
       printf("dequeue--file_name: %s\n", file_name);
-      //log_pcap_file(pf->pcap, pf->file_name);
+      log_pcap_file(pcap, file_name);
       //HPFeedsPublish(data, config);
     }
     else{
@@ -797,12 +791,12 @@ static int pcap_file_send(char* file_name, FILE* fp)
  */
 #define LOG_ERR_PRINT  LogMessage
 
-static int log_pcap_file(Packet* p, char* file_name)
+static int log_pcap_file(packet* p, char* file_name)
 {
+    //printf("log_pcap_file: %s\n", file_name);
     pcap_t* pcap_handle;
     pcap_dumper_t* pcap_dump_handle;
     FILE* fp;
-    //char* file_path;
 
     if ((p == NULL) || (p->eh == NULL) || (p->iph == NULL))
     {
@@ -822,7 +816,6 @@ static int log_pcap_file(Packet* p, char* file_name)
         free(file_name);
         return -4;
     }
-
     pcap_dump((u_char*)pcap_dump_handle, (struct pcap_pkthdr*)p->pkth,p->pkt);
     pcap_dump_flush(pcap_dump_handle);
     pcap_dump_close(pcap_dump_handle);
@@ -936,15 +929,24 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
       //pf->pcap = p;
       //pf->file_name = file_name;
 
-      packet* pcap //= (packet)malloc(sizeof(packet));
+      struct pcap_pkthdr* getlen = (struct pcap_pkthdr*)p->pkth;
+
+      packet* pcap = (packet *)malloc(sizeof(packet));
       pcap->pkth = (DAQ_PktHdr_t *)malloc(sizeof(DAQ_PktHdr_t));
-      pcap->pkt = (uint8_t *)malloc(sizeof(uint8_t));
+      //pcap->pkt = (uint8_t *)malloc(sizeof(uint8_t));
+      pcap->pkt = (uint8_t *)malloc(1000);
       pcap->eh = (EtherHdr *)malloc(sizeof(EtherHdr));
       pcap->iph = (IPHdr *)malloc(sizeof(IPHdr));
       *(pcap->pkth) = *(p->pkth);
-      *(pcap->pkt) = *(p->pkt);
+      //copy the pkt
+      int i = 0;
+      while(i < getlen->len){
+          pcap->pkt[i] = p->pkt[i];
+          i++;
+      }
       *(pcap->eh) = *(p->eh);
       *(pcap->iph) = *(p->iph);
+      
       EnQueue(queue, pcap, file_name);
       json_object_set_new(json_record, "file_path", json_string((char *)(&file_name[10])));
       if (file_name != NULL)
