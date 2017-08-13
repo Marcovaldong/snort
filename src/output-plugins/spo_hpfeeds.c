@@ -423,7 +423,7 @@ static void SendThread(HPFeedsConfig *config)
   while(1){
     if(!IsEmpty(queue)){
       DeQueue(queue, &pcap, &file_name);
-      printf("dequeue--file_name: %s\n", file_name);
+      //printf("dequeue--file_name: %s\n", file_name);
       log_pcap_file(pcap, file_name);
       //HPFeedsPublish(data, config);
     }
