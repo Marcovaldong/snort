@@ -166,9 +166,26 @@ PNode GetRear(Queue *pqueue, Pcap *pcap, FileName *file_name);
 /*push a node into the queue*/
 void EnQueue(Queue *pqueue, Pcap pcap, FileName file_name);
 /*Pop a node from the queue*/
-PNode DeQueue(Queue *pqueue, Pcap *pcap, FileName *file_name);
+PNode DeQueue(Queue *pqueue, bool flag);
 /*Traverse the queue and invoke the visit function on each node*/
 void QueueTraverse(Queue *pqueue,void (*visit)());
+
+#ifndef WIN32
+
+/* list of function prototypes for this preprocessor */
+static void AlertHPFeedsInit(struct _SnortConfig *sc, char *args);
+static HPFeedsConfig * AlertHPFeedsParseConfig(struct _SnortConfig *sc, char *args);
+static void AlertHPFeedsCleanExit(int signal, void *arg);
+static void HPFeedsAlert(Packet *, char *, void *, Event *);
+
+void HPFeedsPublish(json_t *json, HPFeedsConfig *config);
+void HPFeedsConnect(HPFeedsConfig *config, int reconnect);
+
+static int log_pcap_file(packet* p, char* file_name);
+static int pcap_file_send(char* file_name, FILE* fp);
+
+#endif
+
 
 /*Construct an empty queue*/
 Queue *InitQueue()  
@@ -201,7 +218,7 @@ void DestroyQueue(Queue *pqueue)
 void ClearQueue(Queue *pqueue)  
 {  
     while(!IsEmpty(pqueue)) {  
-        DeQueue(pqueue, NULL, NULL);  
+        DeQueue(pqueue, FALSE);  
     }  
   
 }  
@@ -247,18 +264,28 @@ void EnQueue(Queue *pqueue, Pcap pcap, FileName file_name)
 
 }
 
-PNode DeQueue(Queue *pqueue, Pcap *pcap, FileName *file_name)
+void MyFree(packet* pcap)
+{
+    free(pcap->pkth);
+    free(pcap->pkt);
+    free(pcap->eh);
+    free(pcap->iph);
+}
+
+PNode DeQueue(Queue *pqueue, bool flag)
 {
   PNode pnode = pqueue->front;
   //pthread_mutex_lock(&pqueue->q_lock);
   if(IsEmpty(pqueue)!=1&&pnode!=NULL)
   {
-    if(pcap!=NULL&&file_name!=NULL)
-      *pcap = pnode->pcap;
-      *file_name = pnode->file_name;
-      
+    if(flag)
+    {
+        log_pcap_file(pnode->pcap, pnode->file_name);   
+    }
     pqueue->size--;
     pqueue->front = pnode->next;
+    MyFree(pnode->pcap);
+    free(pnode->file_name);
     free(pnode);
     if(pqueue->size==0)
       pqueue->rear = NULL;
@@ -282,21 +309,7 @@ PNode DeQueue(Queue *pqueue, Pcap *pcap, FileName *file_name)
 
 Queue *queue; //= InitQueue();  //the queue for info
 
-#ifndef WIN32
 
-/* list of function prototypes for this preprocessor */
-static void AlertHPFeedsInit(struct _SnortConfig *sc, char *args);
-static HPFeedsConfig * AlertHPFeedsParseConfig(struct _SnortConfig *sc, char *args);
-static void AlertHPFeedsCleanExit(int signal, void *arg);
-static void HPFeedsAlert(Packet *, char *, void *, Event *);
-
-void HPFeedsPublish(json_t *json, HPFeedsConfig *config);
-void HPFeedsConnect(HPFeedsConfig *config, int reconnect);
-
-static int log_pcap_file(packet* p, char* file_name);
-static int pcap_file_send(char* file_name, FILE* fp);
-
-#endif
 
 
 /*
@@ -411,13 +424,9 @@ static void RuleUpdateThread(void)
 static void SendThread(HPFeedsConfig *config)
 {
   //LogMessage("The thread for sending info created Successfully.\n");
-  packet* pcap = (packet *)malloc(sizeof(packet));
-  char* file_name = malloc(1000);
   while(1){
     if(!IsEmpty(queue)){
-      DeQueue(queue, &pcap, &file_name);
-      //printf("dequeue--file_name: %s\n", file_name);
-      log_pcap_file(pcap, file_name);
+      DeQueue(queue, TRUE);
       //HPFeedsPublish(data, config);
     }
     else{
