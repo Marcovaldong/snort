@@ -71,7 +71,7 @@
 #include "util.h"
 
 #include "snort.h"
-
+#include "snort_bounds.h"
 #include "pcap.h"
 #include <sys/stat.h>
 
@@ -131,12 +131,14 @@ typedef struct
 
 typedef packet* Pcap;
 typedef char* FileName;
+typedef char* JsonRecode;
 
 typedef struct node* PNode;
 typedef struct node
 {
   Pcap pcap;
   FileName file_name;
+  JsonRecode json_record;
   PNode next;
 }Node;
 
@@ -164,9 +166,9 @@ PNode GetFront(Queue *pqueue, Pcap *pcap, FileName *file_name);
 /*Get the rear node from the queue*/
 PNode GetRear(Queue *pqueue, Pcap *pcap, FileName *file_name);
 /*push a node into the queue*/
-void EnQueue(Queue *pqueue, Pcap pcap, FileName file_name);
+void EnQueue(Queue *pqueue, Pcap pcap, FileName file_name, JsonRecode json_record);
 /*Pop a node from the queue*/
-PNode DeQueue(Queue *pqueue, bool flag);
+PNode DeQueue(Queue *pqueue, bool flag, JsonRecode *json_record);
 /*Traverse the queue and invoke the visit function on each node*/
 void QueueTraverse(Queue *pqueue,void (*visit)());
 
@@ -218,7 +220,7 @@ void DestroyQueue(Queue *pqueue)
 void ClearQueue(Queue *pqueue)  
 {  
     while(!IsEmpty(pqueue)) {  
-        DeQueue(pqueue, FALSE);  
+        DeQueue(pqueue, FALSE, NULL);  
     }  
   
 }  
@@ -239,13 +241,14 @@ int GetSize(Queue *pqueue)
 }  
 
 /*Push a node into the  queue*/
-void EnQueue(Queue *pqueue, Pcap pcap, FileName file_name)
+void EnQueue(Queue *pqueue, Pcap pcap, FileName file_name, JsonRecode json_record)
 {
   PNode pnode = (PNode)malloc(sizeof(Node));
   pnode->file_name = malloc(1000);
   if (pnode != NULL){
     pnode->pcap = pcap;
     strcpy(pnode->file_name, file_name);
+    pnode->json_record = json_record;
     pnode->next = NULL;
 
     //pthread_mutex_lock(&pqueue->q_lock);
@@ -272,15 +275,16 @@ void MyFree(packet* pcap)
     free(pcap->iph);
 }
 
-PNode DeQueue(Queue *pqueue, bool flag)
+PNode DeQueue(Queue *pqueue, bool flag, JsonRecode *json_record)
 {
   PNode pnode = pqueue->front;
   //pthread_mutex_lock(&pqueue->q_lock);
   if(IsEmpty(pqueue)!=1&&pnode!=NULL)
   {
-    if(flag)
+    if(flag&&json_record!=NULL)
     {
-        log_pcap_file(pnode->pcap, pnode->file_name);   
+        log_pcap_file(pnode->pcap, pnode->file_name);
+        *json_record = pnode->json_record;   
     }
     pqueue->size--;
     pqueue->front = pnode->next;
@@ -426,8 +430,9 @@ static void SendThread(HPFeedsConfig *config)
   //LogMessage("The thread for sending info created Successfully.\n");
   while(1){
     if(!IsEmpty(queue)){
-      DeQueue(queue, TRUE);
-      //HPFeedsPublish(data, config);
+      char* data;
+      DeQueue(queue, TRUE, &data);
+      HPFeedsPublish(data, config);
     }
     else{
       //LogMessage("The queue is empty\n");
@@ -911,25 +916,17 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
       pcap->iph = (IPHdr *)malloc(sizeof(IPHdr));
       *(pcap->pkth) = *(p->pkth);
       //copy the pkt
-      int i = 0;
-      while(i < getlen->len){
-          pcap->pkt[i] = p->pkt[i];
-          i++;
-      }
+      // int i = 0;
+      // while(i < getlen->len){
+      //     pcap->pkt[i] = p->pkt[i];
+      //     i++;
+      // }
+      SafeMemcpy(pcap->pkt, p->pkt, getlen->len, p->pkt, (p->pkt+(getlen->len)));
       *(pcap->eh) = *(p->eh);
       *(pcap->iph) = *(p->iph);
       
-      EnQueue(queue, pcap, file_name);
+      //EnQueue(queue, pcap, file_name);
       json_object_set_new(json_record, "file_path", json_string((char *)(&file_name[10])));
-      if (file_name != NULL)
-      {
-          free(file_name);
-      }
-
-      if (path != NULL)
-      {
-          free(path);
-      }
    
       switch (GET_IPH_PROTO(p))
       {
@@ -1096,8 +1093,18 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
     }
 
 #endif
+    char* data = json_dumps(json_record, 0);
+    EnQueue(queue, pcap, file_name, data);
+    if (file_name != NULL)
+      {
+          free(file_name);
+      }
 
-    HPFeedsPublish(json_record, config);
+      if (path != NULL)
+      {
+          free(path);
+      }
+    //HPFeedsPublish(json_record, config);
     json_decref(json_record);
 }
 
