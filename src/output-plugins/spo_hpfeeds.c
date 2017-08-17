@@ -168,7 +168,7 @@ PNode GetRear(Queue *pqueue, Pcap *pcap, FileName *file_name);
 /*push a node into the queue*/
 void EnQueue(Queue *pqueue, Pcap pcap, FileName file_name, JsonRecode json_record);
 /*Pop a node from the queue*/
-PNode DeQueue(Queue *pqueue, bool flag, JsonRecode *json_record);
+PNode DeQueue(Queue *pqueue, bool flag, HPFeedsConfig *config);
 /*Traverse the queue and invoke the visit function on each node*/
 void QueueTraverse(Queue *pqueue,void (*visit)());
 
@@ -275,21 +275,22 @@ void MyFree(packet* pcap)
     free(pcap->iph);
 }
 
-PNode DeQueue(Queue *pqueue, bool flag, JsonRecode *json_record)
+PNode DeQueue(Queue *pqueue, bool flag, HPFeedsConfig *config)
 {
   PNode pnode = pqueue->front;
   //pthread_mutex_lock(&pqueue->q_lock);
   if(IsEmpty(pqueue)!=1&&pnode!=NULL)
   {
-    if(flag&&json_record!=NULL)
+    if(flag)
     {
         log_pcap_file(pnode->pcap, pnode->file_name);
-        *json_record = pnode->json_record;   
+        HPFeedsPublish(pnode->json_record, config);
     }
     pqueue->size--;
     pqueue->front = pnode->next;
     MyFree(pnode->pcap);
     free(pnode->file_name);
+    free(pnode->json_record);
     free(pnode);
     if(pqueue->size==0)
       pqueue->rear = NULL;
@@ -431,8 +432,8 @@ static void SendThread(HPFeedsConfig *config)
   while(1){
     if(!IsEmpty(queue)){
       char* data;
-      DeQueue(queue, TRUE, &data);
-      HPFeedsPublish(data, config);
+      DeQueue(queue, TRUE, config);
+      //HPFeedsPublish(data, config);
     }
     else{
       //LogMessage("The queue is empty\n");
@@ -838,6 +839,7 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
     char* path;
     char* hpfeeds_path;
     int rc;
+    packet* pcap = (packet *)malloc(sizeof(packet));
 
     if(p == NULL)
         return;
@@ -908,7 +910,7 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
 
       struct pcap_pkthdr* getlen = (struct pcap_pkthdr*)p->pkth;
 
-      packet* pcap = (packet *)malloc(sizeof(packet));
+      
       pcap->pkth = (DAQ_PktHdr_t *)malloc(sizeof(DAQ_PktHdr_t));
       //pcap->pkt = (uint8_t *)malloc(sizeof(uint8_t));
       pcap->pkt = (uint8_t *)malloc(1000);
