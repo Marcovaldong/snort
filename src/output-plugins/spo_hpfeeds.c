@@ -71,7 +71,7 @@
 #include "util.h"
 
 #include "snort.h"
-#include "snort_bounds.h"
+
 #include "pcap.h"
 #include <sys/stat.h>
 
@@ -911,12 +911,11 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
       pcap->iph = (IPHdr *)malloc(sizeof(IPHdr));
       *(pcap->pkth) = *(p->pkth);
       //copy the pkt
-      //int i = 0;
-      //while(i < getlen->len){
-          //pcap->pkt[i] = p->pkt[i];
-          //i++;
-      //}
-	  SafeMemcpy(pcap->pkt, p->pkt, getlen->len, p->pkt, (p->pkt+(getlen->len)));
+      int i = 0;
+      while(i < getlen->len){
+          pcap->pkt[i] = p->pkt[i];
+          i++;
+      }
       *(pcap->eh) = *(p->eh);
       *(pcap->iph) = *(p->iph);
       
