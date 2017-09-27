@@ -911,11 +911,12 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
       pcap->iph = (IPHdr *)malloc(sizeof(IPHdr));
       *(pcap->pkth) = *(p->pkth);
       //copy the pkt
-      int i = 0;
-      while(i < getlen->len){
-          pcap->pkt[i] = p->pkt[i];
-          i++;
-      }
+      // int i = 0;
+      // while(i < getlen->len){
+      //     pcap->pkt[i] = p->pkt[i];
+      //     i++;
+      // }
+      SafeMemcpy(pcap->pkt, p->pkt, getlen->len, p->pkt, (p->pkt+(getlen->len)));
       *(pcap->eh) = *(p->eh);
       *(pcap->iph) = *(p->iph);
       
