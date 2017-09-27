@@ -71,7 +71,7 @@
 #include "util.h"
 
 #include "snort.h"
-
+#include "snort_bounds.h"
 #include "pcap.h"
 #include <sys/stat.h>
 
