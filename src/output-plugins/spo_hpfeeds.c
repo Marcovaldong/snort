@@ -184,6 +184,9 @@ void HPFeedsConnect(HPFeedsConfig *config, int reconnect);
 static int log_pcap_file(packet* p, char* file_name);
 static int pcap_file_send(char* file_name, FILE* fp);
 
+int num_en;
+int num_de;
+
 #endif
 
 
@@ -196,8 +199,8 @@ Queue *InitQueue()
         pqueue->front = NULL;  
         pqueue->rear = NULL;  
         pqueue->size = 0;  
-        //pthread_mutex_init(&pqueue->q_lock, NULL);         
-        //pthread_cond_init(&pqueue->cond, NULL);  
+        pthread_mutex_init(&pqueue->q_lock, NULL);         
+        pthread_cond_init(&pqueue->cond, NULL);  
     }  
     return pqueue;  
 }  
@@ -208,8 +211,8 @@ void DestroyQueue(Queue *pqueue)
     if(!pqueue)  
         return;  
     ClearQueue(pqueue);  
-    //pthread_mutex_destroy(&pqueue->q_lock);  
-    //pthread_cond_destroy(&pqueue->cond); 
+    pthread_mutex_destroy(&pqueue->q_lock);  
+    pthread_cond_destroy(&pqueue->cond); 
     free(pqueue);  
     pqueue = NULL;  
 }  
@@ -225,8 +228,9 @@ void ClearQueue(Queue *pqueue)
 
 /*Determine whether the queue is empty*/
 int IsEmpty(Queue *pqueue)  
-{  
-    if(pqueue->front==NULL&&pqueue->rear==NULL&&pqueue->size==0)  
+{ 
+    //printf("pqueue->size: %d\n", pqueue->size);
+    if(pqueue->size==0)  
         return 1;  
     else  
         return 0;  
@@ -248,9 +252,9 @@ void EnQueue(Queue *pqueue, Pcap pcap, FileName file_name)
     strcpy(pnode->file_name, file_name);
     pnode->next = NULL;
 
-    //pthread_mutex_lock(&pqueue->q_lock);
+    pthread_mutex_lock(&pqueue->q_lock);
 
-    if(IsEmpty(pqueue)){
+    if(IsEmpty(pqueue)&&pqueue->front==NULL){
       pqueue->front = pnode;
     }
     else{
@@ -258,8 +262,8 @@ void EnQueue(Queue *pqueue, Pcap pcap, FileName file_name)
     }
     pqueue->rear = pnode;
     pqueue->size++;
-    //pthread_cond_signal(&pqueue->cond);
-    //pthread_mutex_unlock(&pqueue->q_lock);
+    pthread_cond_signal(&pqueue->cond);
+    pthread_mutex_unlock(&pqueue->q_lock);
   }
 
 }
@@ -275,22 +279,30 @@ void MyFree(packet* pcap)
 PNode DeQueue(Queue *pqueue, bool flag)
 {
   PNode pnode = pqueue->front;
-  //pthread_mutex_lock(&pqueue->q_lock);
   if(IsEmpty(pqueue)!=1&&pnode!=NULL)
   {
     if(flag)
     {
-        log_pcap_file(pnode->pcap, pnode->file_name);   
+        log_pcap_file(pnode->pcap, pnode->file_name);
+	num_de++;
+        printf("Enqueue: %d, ", num_en);
+	printf("Dequeue: %d\n", num_de);
     }
+    pthread_mutex_lock(&pqueue->q_lock);
     pqueue->size--;
+    //if(pqueue->size==0)
+    //    pqueue->rear = pnode->next;
     pqueue->front = pnode->next;
     MyFree(pnode->pcap);
+    //printf("MyFree(pnode->pcap)\n");
     free(pnode->file_name);
+    //printf("free(pnode->file_name)\n");
     free(pnode);
+    //printf("free(pnode)\n");
     if(pqueue->size==0)
-      pqueue->rear = NULL;
+        pqueue->rear = NULL;
+    pthread_mutex_unlock(&pqueue->q_lock);
   }
-  //pthread_mutex_unlock(&pqueue->q_lock);  
   return pqueue->front;
 }
 
@@ -308,7 +320,6 @@ PNode DeQueue(Queue *pqueue, bool flag)
 
 
 Queue *queue; //= InitQueue();  //the queue for info
-
 
 
 
@@ -406,10 +417,10 @@ static void RuleUpdateThread(void)
         }
         //close(remote_socket);
         LogMessage("Updating Rules\n");
+        send(remote_socket, "Update rules successly");  //send back info
         close(local_socket);
         close(remote_socket);
         system("/opt/mhn/rules/update_snort_rules.sh");
-        //send(remote_socket, "Update rules successly");  //send back info
     }
 /**
     while (1)
@@ -425,8 +436,11 @@ static void SendThread(HPFeedsConfig *config)
 {
   //LogMessage("The thread for sending info created Successfully.\n");
   while(1){
+    //printf("Send Thread\n");
     if(!IsEmpty(queue)){
+      //printf("start to dequeue\n");
       DeQueue(queue, TRUE);
+      //printf("Finish dequeue\n");
       //HPFeedsPublish(data, config);
     }
     else{
@@ -458,6 +472,8 @@ static void AlertHPFeedsInit(struct _SnortConfig *sc, char *args)
     pthread_t thread2;
 
     queue = InitQueue();  //the queue for info
+    num_en = 0;
+    num_de = 0;    
 
     DEBUG_WRAP(DebugMessage(DEBUG_INIT, "Output: hpfeeds Initialized\n"););
 
@@ -911,16 +927,18 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
       pcap->iph = (IPHdr *)malloc(sizeof(IPHdr));
       *(pcap->pkth) = *(p->pkth);
       //copy the pkt
-      int i = 0;
-      while(i < getlen->len){
-          pcap->pkt[i] = p->pkt[i];
-          i++;
-      }
-      //SafeMemcpy(pcap->pkt, p->pkt, getlen->len, p->pkt, (p->pkt+(getlen->len)));  # bad packet
+      // int i = 0;
+      // while(i < getlen->len){
+      //     pcap->pkt[i] = p->pkt[i];
+      //     i++;
+      // }
+      SafeMemcpy(pcap->pkt, p->pkt, getlen->len, p->pkt, (p->pkt+(getlen->len)));
       *(pcap->eh) = *(p->eh);
       *(pcap->iph) = *(p->iph);
       
       EnQueue(queue, pcap, file_name);
+      num_en++;
+      printf("enqueue: %d\n", num_en);
       json_object_set_new(json_record, "file_path", json_string((char *)(&file_name[10])));
       if (file_name != NULL)
       {
