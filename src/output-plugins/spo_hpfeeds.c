@@ -417,7 +417,7 @@ static void RuleUpdateThread(void)
         }
         //close(remote_socket);
         LogMessage("Updating Rules\n");
-        send(remote_socket, "Update rules successly");  //send back info
+        //send(remote_socket, "Update rules successly");  //send back info
         close(local_socket);
         close(remote_socket);
         system("/opt/mhn/rules/update_snort_rules.sh");
