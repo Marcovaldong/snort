@@ -149,6 +149,23 @@ typedef struct
   pthread_cond_t cond;
 }Queue;
 
+typedef char* JsonRecode;
+typedef struct jnode* JPNode;
+typedef struct jnode
+{
+  JsonRecode json_record;
+  JPNode next;
+}JNode;
+
+typedef struct 
+{
+  JPNode front;
+  JPNode rear;
+  int size;
+  pthread_mutex_t q_lock;
+  pthread_cond_t cond;
+}JQueue;
+
 /*Construct an empty queue*/
 Queue *InitQueue();
 /*Destroy a queue*/
@@ -166,9 +183,32 @@ PNode GetRear(Queue *pqueue, Pcap *pcap, FileName *file_name);
 /*push a node into the queue*/
 void EnQueue(Queue *pqueue, Pcap pcap, FileName file_name);
 /*Pop a node from the queue*/
-PNode DeQueue(Queue *pqueue, bool flag);
+//PNode DeQueue(Queue *pqueue, bool flag);
+PNode DeQueue(Queue *pqueue, Queue *qqueue);
 /*Traverse the queue and invoke the visit function on each node*/
 void QueueTraverse(Queue *pqueue,void (*visit)());
+
+/*Construct an empty jqueue*/
+JQueue *InitJQueue();
+/*Destroy a jqueue*/
+void DestroyJQueue(JQueue *pqueue);  
+/*Clear a jqueue*/
+void ClearJQueue(JQueue *pqueue); 
+/*Determine whether the jqueue is empty*/
+int IsJEmpty(JQueue *pqueue); 
+/*Get the front node from the jqueue*/
+/*Get the size of the jqueue*/
+int GetJSize(JQueue *pqueue);
+JPNode GetJFront(JQueue *pqueue, JsonRecode json_record);
+/*Get the rear node from the jqueue*/
+JPNode GetJRear(JQueue *pqueue, JsonRecode json_record);
+/*push a node into the jqueue*/
+void EnJQueue(JQueue *pqueue, JsonRecode json_record);
+/*Pop a node from the jqueue*/
+//JPNode DeJQueue(JQueue *pqueue, JsonRecode *json_record);
+JPNode DeJQueue(JQueue *pqueue, JQueue *qqueue);
+/*Traverse the jqueue and invoke the visit function on each node*/
+void JQueueTraverse(JQueue *pqueue,void (*visit)());
 
 #ifndef WIN32
 
@@ -178,7 +218,7 @@ static HPFeedsConfig * AlertHPFeedsParseConfig(struct _SnortConfig *sc, char *ar
 static void AlertHPFeedsCleanExit(int signal, void *arg);
 static void HPFeedsAlert(Packet *, char *, void *, Event *);
 
-void HPFeedsPublish(json_t *json, HPFeedsConfig *config);
+void HPFeedsPublish(char *json, HPFeedsConfig *config);
 void HPFeedsConnect(HPFeedsConfig *config, int reconnect);
 
 static int log_pcap_file(packet* p, char* file_name);
@@ -221,7 +261,7 @@ void DestroyQueue(Queue *pqueue)
 void ClearQueue(Queue *pqueue)  
 {  
     while(!IsEmpty(pqueue)) {  
-        DeQueue(pqueue, FALSE);  
+        DeQueue(pqueue, NULL);  
     }  
   
 }  
@@ -276,51 +316,146 @@ void MyFree(packet* pcap)
     free(pcap->iph);
 }
 
-PNode DeQueue(Queue *pqueue, bool flag)
+
+PNode DeQueue(Queue *pqueue, Queue *qqueue)
 {
-  PNode pnode = pqueue->front;
-  if(IsEmpty(pqueue)!=1&&pnode!=NULL)
-  {
-    if(flag)
-    {
-        log_pcap_file(pnode->pcap, pnode->file_name);
-	num_de++;
-        printf("Enqueue: %d, ", num_en);
-	printf("Dequeue: %d\n", num_de);
+    //printf("DeQueue...\n");
+    if(IsEmpty(pqueue)!=1)
+    {   
+        pthread_mutex_lock(&pqueue->q_lock);
+        qqueue->front = pqueue->front;
+        qqueue->rear = pqueue->rear;
+        qqueue->size = pqueue->size;
+        pqueue->front = NULL;  
+        pqueue->rear = NULL;  
+        pqueue->size = 0;
+        pthread_mutex_unlock(&pqueue->q_lock);
     }
-    pthread_mutex_lock(&pqueue->q_lock);
-    pqueue->size--;
-    //if(pqueue->size==0)
-    //    pqueue->rear = pnode->next;
-    pqueue->front = pnode->next;
-    MyFree(pnode->pcap);
-    //printf("MyFree(pnode->pcap)\n");
-    free(pnode->file_name);
-    //printf("free(pnode->file_name)\n");
-    free(pnode);
-    //printf("free(pnode)\n");
-    if(pqueue->size==0)
-        pqueue->rear = NULL;
-    pthread_mutex_unlock(&pqueue->q_lock);
-  }
-  return pqueue->front;
+    //printf("After DeQueue...\n");
 }
 
-/*Traverse the queue and invoke the visit function on each node*/
-// void QueueTraverse(Queue *pqueue,void (*visit)())
-// {
-//   PNode pnode = pqueue->front;
-//   int i = pqueue->size;
-//   where(i--)
-//   {
-//     //visit(pnode->json_record);
-//     pnode = pnode->next;
-//   }
-// }
+/*Construct an empty jqueue*/
+JQueue *InitJQueue()  
+{  
+    JQueue *pqueue = (JQueue *)malloc(sizeof(JQueue));  
+    if(pqueue!=NULL)  
+    {  
+        pqueue->front = NULL;  
+        pqueue->rear = NULL;  
+        pqueue->size = 0;  
+        pthread_mutex_init(&pqueue->q_lock, NULL);         
+        pthread_cond_init(&pqueue->cond, NULL);  
+    }  
+    return pqueue;  
+}  
+
+/*Destroy a jqueue*/
+void DestroyJQueue(JQueue *pqueue)  
+{  
+    if(!pqueue)  
+        return; 
+    while(pqueue->front)
+    {
+	JPNode pnode = pqueue->front;
+	pqueue->front = pnode->next;
+	free(pnode);
+	pqueue->size--;
+    }
+    pthread_mutex_destroy(&pqueue->q_lock);  
+    pthread_cond_destroy(&pqueue->cond); 
+    free(pqueue);  
+    pqueue = NULL;  
+}  
+
+/*Clear a jqueue*/
+void ClearJQueue(JQueue *pqueue)  
+{  
+    printf("In ClearJQueue\n");
+    while(!IsJEmpty(pqueue)) { 
+        printf("Clearing JQueue\n"); 
+        DeJQueue(pqueue, NULL);  
+    }  
+  
+}  
+
+/*Determine whether the jqueue is empty*/
+int IsJEmpty(JQueue *pqueue)  
+{  
+    if(pqueue->front==NULL&&pqueue->rear==NULL&&pqueue->size==0)  
+        return 1;  
+    else  
+        return 0;  
+}  
+
+/*Get the size of the jqueue*/
+int GetJSize(JQueue *pqueue)  
+{  
+    return pqueue->size;  
+}  
+
+/*Push a node into the  jqueue*/
+void EnJQueue(JQueue *pqueue, JsonRecode json_record)
+{
+  JPNode pnode = (JPNode)malloc(sizeof(JNode));
+  if (pnode != NULL){
+    //printf("pnode isn't NULL\n");
+    pnode->json_record = json_record;
+    pnode->next = NULL;
+
+    pthread_mutex_lock(&pqueue->q_lock);
+
+    if(IsJEmpty(pqueue)){
+      pqueue->front = pnode;
+    }
+    else{
+      pqueue->rear->next = pnode;
+    }
+    pqueue->rear = pnode;
+    pqueue->size++;
+    
+    pthread_mutex_unlock(&pqueue->q_lock);
+  }
+
+}
+
+//JPNode DeJQueue(JQueue *pqueue, JsonRecode *json_record)
+//{
+//  JPNode pnode = pqueue->front;
+//  if(IsJEmpty(pqueue)!=1&&pnode!=NULL)
+//  {
+//    if(json_record!=NULL)
+//      *json_record = pnode->json_record;
+//    pthread_mutex_lock(&pqueue->q_lock);
+//    pqueue->size--;
+//    pqueue->front = pnode->next;
+//    free(pnode);
+//    if(pqueue->size==0)
+//      pqueue->rear = NULL;
+//    pthread_mutex_unlock(&pqueue->q_lock);  
+//  }
+//  //pthread_mutex_unlock(&pqueue->q_lock);  
+//  return pqueue->front;
+//}
+
+JPNode DeJQueue(JQueue *pqueue, JQueue *qqueue)
+{
+    if(IsJEmpty(pqueue)!=1)
+    {   
+        pthread_mutex_lock(&pqueue->q_lock);
+        qqueue->front = pqueue->front;
+        qqueue->rear = pqueue->rear;
+        qqueue->size = pqueue->size;
+        pqueue->front = NULL;  
+        pqueue->rear = NULL;  
+        pqueue->size = 0;
+        pthread_mutex_unlock(&pqueue->q_lock);
+    }
+    
+}
 
 
-Queue *queue; //= InitQueue();  //the queue for info
-
+Queue *queue; //= InitQueue();  //the queue for pcap
+JQueue * jqueue; // the queue for json info
 
 
 /*
@@ -432,23 +567,102 @@ static void RuleUpdateThread(void)
 }
 
 
+//static void SendThread(HPFeedsConfig *config)
+//{
+//  //LogMessage("The thread for sending info created Successfully.\n");
+//  while(1){
+//    //printf("Send Thread\n");
+//    if(!IsEmpty(queue)){
+//      //printf("start to dequeue\n");
+//      DeQueue(queue, TRUE);
+//    }
+//    else{
+//      sleep(1);
+//      continue;
+//    }
+//  }
+//}
+
 static void SendThread(HPFeedsConfig *config)
 {
-  //LogMessage("The thread for sending info created Successfully.\n");
-  while(1){
-    //printf("Send Thread\n");
-    if(!IsEmpty(queue)){
-      //printf("start to dequeue\n");
-      DeQueue(queue, TRUE);
-      //printf("Finish dequeue\n");
-      //HPFeedsPublish(data, config);
+    int pcapnum = 0;
+    while(1)
+    {
+	
+        //Queue *qqueue = InitQueue();
+        if(!IsEmpty(queue))
+	{
+	    //printf("pcapnum: %d\n", pcapnum);
+	    Queue * qqueue = InitQueue();
+	    DeQueue(queue, qqueue);
+	    while(qqueue->front)
+	    {
+		pcapnum++;
+		PNode pnode = qqueue->front;
+		log_pcap_file(pnode->pcap, pnode->file_name);
+		qqueue->front = pnode->next;
+		MyFree(pnode->pcap);
+	        free(pnode->file_name);
+		free(pnode);
+		qqueue->size--;
+	    }
+	    DestroyQueue(qqueue);
+	    printf("pcapnum: %d\n", pcapnum);
+	}
+        else{
+	    sleep(5);
+	    continue;
+	}
     }
-    else{
-      //LogMessage("The queue is empty\n");
-      sleep(1);
-      continue;
+}
+
+
+//static void SendInfoThread(HPFeedsConfig *config)
+//{
+//    //HPFeedsConfig *config = (HPFeedsConfig *) arg;
+//  LogMessage("The thread for sending info created Successfully.\n");
+//  while(1){
+//    if(!IsJEmpty(jqueue)){
+//      char* data;
+//      DeJQueue(jqueue, &data);
+//      HPFeedsPublish(data, config);
+//    }
+//    else{
+//      //LogMessage("The queue is empty\n");
+//      sleep(1);
+//      continue;
+//    }
+//  }
+//}
+
+static void SendInfoThread(HPFeedsConfig *config)
+{
+    int jsonnum = 0;
+    LogMessage("The thread for sending info created Successfully.\n");
+    while(1){
+        if(!IsJEmpty(jqueue)){
+	    //printf("jsonnum: %d\n", jsonnum);
+            JQueue * qqueue = InitJQueue();
+            DeJQueue(jqueue, qqueue);
+            while(qqueue->front)
+            {
+                jsonnum++;
+                JPNode pnode = qqueue->front;
+                //printf("%d\n", qqueue->size);
+                //printf("%s\n", pnode->json_record);
+                HPFeedsPublish(pnode->json_record, config);
+                qqueue->front = pnode->next;
+                free(pnode);
+                qqueue->size--;
+            }
+            DestroyJQueue(qqueue);
+    	    printf("jsonnum: %d\n", jsonnum);
+        }
+        else{
+            sleep(10);
+            continue;
+        }
     }
-  }
 }
 
 
@@ -470,8 +684,10 @@ static void AlertHPFeedsInit(struct _SnortConfig *sc, char *args)
     HPFeedsConfig *config;
     pthread_t thread1;
     pthread_t thread2;
+    pthread_t thread3;
 
-    queue = InitQueue();  //the queue for info
+    queue = InitQueue();  //the queue for pcap
+    jqueue = InitJQueue(); // the queue for json info
     num_en = 0;
     num_de = 0;    
 
@@ -501,6 +717,14 @@ static void AlertHPFeedsInit(struct _SnortConfig *sc, char *args)
     else
     {
         LogMessage("Successfully created SendThread!\n");
+    }
+    if (pthread_create(&thread3, NULL, SendInfoThread, config) != 0)
+    {
+        LogMessage("Failed to create SendInfoThread!\n");
+    }
+    else
+    {
+        LogMessage("Successfully created SendInfoThread!\n");
     }
 }
 
@@ -660,6 +884,7 @@ static void AlertHPFeedsCleanExit(int signal, void *arg)
 
       //free the queue
       DestroyQueue(queue);
+      DestroyJQueue(jqueue);
     }
 }
 
@@ -821,9 +1046,9 @@ static int log_pcap_file(packet* p, char* file_name)
     pcap_dump_close(pcap_dump_handle);
     pcap_close(pcap_handle);
 
-    fp = fopen(file_name, "rb");
-    pcap_file_send(&file_name[10], fp);
-    fclose(fp);
+    //fp = fopen(file_name, "rb");
+    //pcap_file_send(&file_name[10], fp);
+    //fclose(fp);
     
     return 0;
 } 
@@ -849,6 +1074,7 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
     char* path;
     char* hpfeeds_path;
     int rc;
+    //char* data;
 
     if(p == NULL)
         return;
@@ -938,7 +1164,7 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
       
       EnQueue(queue, pcap, file_name);
       num_en++;
-      printf("enqueue: %d\n", num_en);
+      //printf("enqueue: %d\n", num_en);
       json_object_set_new(json_record, "file_path", json_string((char *)(&file_name[10])));
       if (file_name != NULL)
       {
@@ -1047,7 +1273,7 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
     }
 
 
-#ifndef NO_NON_ETHER_DECODER
+    #ifndef NO_NON_ETHER_DECODER
 
     if (p->trh != NULL)
     {
@@ -1116,7 +1342,10 @@ static void HPFeedsAlert(Packet *p, char *msg, void *arg, Event *event)
 
 #endif
 
-    HPFeedsPublish(json_record, config);
+    //HPFeedsPublish(json_record, config);
+    char* data = json_dumps(json_record, 0);
+    EnJQueue(jqueue, data);
+    //printf("json--queue size:%d\n", jqueue->size);
     json_decref(json_record);
 }
 
@@ -1334,11 +1563,11 @@ void HPFeedsConnect(HPFeedsConfig *config, int reconnect)
 }
 
 
-void HPFeedsPublish(json_t *json, HPFeedsConfig *config)
+void HPFeedsPublish(char *json, HPFeedsConfig *config)
 {
 
-  char *data = json_dumps(json, 0);
-  //char *data = json;
+  //char *data = json_dumps(json, 0);
+  char *data = json;
   unsigned int len = strlen(data);
   hpf_msg_t *msg;
 
